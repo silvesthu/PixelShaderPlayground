@@ -23,19 +23,7 @@ static const uint32_t kTargetSizeX				= 4096;
 static const uint32_t kTargetSizeY				= 4096;
 static const bool kPrintDisassembly				= false;
 
-static LRESULT WINAPI sWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
-{
-	switch (msg)
-	{
-		case WM_DESTROY:
-			::PostQuitMessage(0);
-			return 0;
-	}
-
-	return ::DefWindowProc(hWnd, msg, wParam, lParam);
-}
-
-int Run(HWND hwnd)
+int main()
 {
 	ComPtr<ID3D12Debug> d3d12_debug;
 	D3D12GetDebugInterface(IID_PPV_ARGS(&d3d12_debug));
@@ -102,38 +90,38 @@ int Run(HWND hwnd)
 		utils->CreateDefaultIncludeHandler(&dxc_include_handler);
 
 		auto check_result = [](ComPtr<IDxcOperationResult> result)
-		{
-			HRESULT compile_result;
-			result->GetStatus(&compile_result);
-
-			ComPtr<IDxcBlobEncoding> error_blob;
-			if (SUCCEEDED(result->GetErrorBuffer(&error_blob)) && error_blob != nullptr)
 			{
-				std::string message((const char*)error_blob->GetBufferPointer(), error_blob->GetBufferSize());
-				printf("%s", message.c_str());
-				printf("\n");
-			}
-			return SUCCEEDED(compile_result);
-		};
+				HRESULT compile_result;
+				result->GetStatus(&compile_result);
+
+				ComPtr<IDxcBlobEncoding> error_blob;
+				if (SUCCEEDED(result->GetErrorBuffer(&error_blob)) && error_blob != nullptr)
+				{
+					std::string message((const char*)error_blob->GetBufferPointer(), error_blob->GetBufferSize());
+					printf("%s", message.c_str());
+					printf("\n");
+				}
+				return SUCCEEDED(compile_result);
+			};
 
 		auto print_reflection = [&](ComPtr<IDxcBlob> blob)
-		{
-			DxcBuffer dxc_buffer{ .Ptr = blob->GetBufferPointer(), .Size = blob->GetBufferSize(), .Encoding = DXC_CP_ACP };
-			ComPtr<ID3D12ShaderReflection> shader_reflection;
-			utils->CreateReflection(&dxc_buffer, IID_PPV_ARGS(&shader_reflection));
-			UINT64 shader_required_flags = shader_reflection->GetRequiresFlags();
-			printf("D3D_SHADER_REQUIRES_WAVE_OPS = %d\n", (shader_required_flags & D3D_SHADER_REQUIRES_WAVE_OPS) ? 1 : 0);
-			printf("D3D_SHADER_REQUIRES_DOUBLES = %d\n", (shader_required_flags & D3D_SHADER_REQUIRES_DOUBLES) ? 1 : 0);
-			printf("\n");
-
-			ComPtr<IDxcBlobEncoding> disassemble_blob;
-			if (kPrintDisassembly && SUCCEEDED(compiler->Disassemble(blob.Get(), &disassemble_blob)))
 			{
-				std::string message((const char*)disassemble_blob->GetBufferPointer(), disassemble_blob->GetBufferSize());
-				printf("%s", message.c_str());
+				DxcBuffer dxc_buffer{ .Ptr = blob->GetBufferPointer(), .Size = blob->GetBufferSize(), .Encoding = DXC_CP_ACP };
+				ComPtr<ID3D12ShaderReflection> shader_reflection;
+				utils->CreateReflection(&dxc_buffer, IID_PPV_ARGS(&shader_reflection));
+				UINT64 shader_required_flags = shader_reflection->GetRequiresFlags();
+				printf("D3D_SHADER_REQUIRES_WAVE_OPS = %d\n", (shader_required_flags & D3D_SHADER_REQUIRES_WAVE_OPS) ? 1 : 0);
+				printf("D3D_SHADER_REQUIRES_DOUBLES = %d\n", (shader_required_flags & D3D_SHADER_REQUIRES_DOUBLES) ? 1 : 0);
 				printf("\n");
-			}
-		};
+
+				ComPtr<IDxcBlobEncoding> disassemble_blob;
+				if (kPrintDisassembly && SUCCEEDED(compiler->Disassemble(blob.Get(), &disassemble_blob)))
+				{
+					std::string message((const char*)disassemble_blob->GetBufferPointer(), disassemble_blob->GetBufferSize());
+					printf("%s", message.c_str());
+					printf("\n");
+				}
+			};
 
 		compiler->Compile(source_blob.Get(), L"Shader.hlsl", L"vs_main", L"vs_6_7", arguments, _countof(arguments), defines, _countof(defines), dxc_include_handler.Get(), &result);
 		result->GetResult(&vs_blob);
@@ -275,7 +263,6 @@ int Run(HWND hwnd)
 
 	ComPtr<ID3D12GraphicsCommandList> command_list;
 	device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, command_allocator.Get(), nullptr, IID_PPV_ARGS(&command_list));
-	command_list->Close();
 
 	ComPtr<ID3D12Fence> fence;
 	device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
@@ -289,39 +276,19 @@ int Run(HWND hwnd)
 	swap_chain_desc.Width = 0;
 	swap_chain_desc.Height = 0;
 	swap_chain_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	swap_chain_desc.Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT | DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
 	swap_chain_desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 	swap_chain_desc.SampleDesc.Count = 1;
-	swap_chain_desc.SampleDesc.Quality = 0;
 	swap_chain_desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-	swap_chain_desc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
-	swap_chain_desc.Scaling = DXGI_SCALING_STRETCH;
-	swap_chain_desc.Stereo = FALSE;
 	ComPtr<IDXGISwapChain1> swap_chain_1 = nullptr;
 	ComPtr<IDXGISwapChain3> swap_chain = nullptr;
-	factory->CreateSwapChainForHwnd(command_queue.Get(), hwnd, &swap_chain_desc, nullptr, nullptr, &swap_chain_1);
+	factory->CreateSwapChainForHwnd(command_queue.Get(), GetConsoleWindow(), &swap_chain_desc, nullptr, nullptr, &swap_chain_1);
 	swap_chain_1->QueryInterface(IID_PPV_ARGS(&swap_chain));
-
-	::ShowWindow(hwnd, SW_SHOWDEFAULT);
-	::UpdateWindow(hwnd);
 
 	//////////////////////////////////////////////////////////////////////////
 
 	uint32_t frame_index = 0;
-	MSG msg;
-	ZeroMemory(&msg, sizeof(msg));
-	while (msg.message != WM_QUIT)
+	while (true)
 	{
-		if (::PeekMessage(&msg, nullptr, 0U, 0U, PM_REMOVE))
-		{
-			::TranslateMessage(&msg);
-			::DispatchMessage(&msg);
-			continue;
-		}
-
-		command_allocator->Reset();
-		command_list->Reset(command_allocator.Get(), nullptr);
-
 		D3D12_RESOURCE_DESC desc = rtv.mDesc;
 		D3D12_VIEWPORT viewport = {};
 		viewport.Width = static_cast<float>(desc.Width);
@@ -418,35 +385,11 @@ int Run(HWND hwnd)
 			rtv.mReadbackResource->Unmap(0, nullptr);
 		}
 
+		command_allocator->Reset();
+		command_list->Reset(command_allocator.Get(), nullptr);
+
 		frame_index++;
 	}
-
-	return 0;
-}
-
-int WinMain(HINSTANCE /*hInstance*/, HINSTANCE /*hPrevInstance*/, PSTR /*lpCmdLine*/, int /*nCmdShow*/)
-{
-	::AllocConsole();
-	FILE* stream = nullptr;
-	freopen_s(&stream, "CONOUT$", "w", stdout);
-
-	WNDCLASSEX wc = { sizeof(WNDCLASSEX), CS_CLASSDC, sWndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, kApplicationTitleW, nullptr};
-	::RegisterClassEx(&wc);
-
-	RECT rect = { 0, 0, 400, 400 };
-	AdjustWindowRect(&rect, WS_OVERLAPPEDWINDOW, false);
-	HWND hwnd = ::CreateWindow(wc.lpszClassName, kApplicationTitleW, WS_OVERLAPPEDWINDOW, 100, 100, rect.right - rect.left, rect.bottom - rect.top, nullptr, nullptr, wc.hInstance, nullptr);
-
-	Run(hwnd);
-
-	::DestroyWindow(hwnd);
-	::UnregisterClass(wc.lpszClassName, wc.hInstance);
-
-	::FreeConsole();
-
-	ComPtr<IDXGIDebug1> dxgi_debug;
-	if (SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&dxgi_debug))))
-		dxgi_debug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_FLAGS(DXGI_DEBUG_RLO_DETAIL | DXGI_DEBUG_RLO_IGNORE_INTERNAL));
 
 	return 0;
 }
